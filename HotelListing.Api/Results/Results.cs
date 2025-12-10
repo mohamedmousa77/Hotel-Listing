@@ -35,6 +35,7 @@ public readonly record struct Result<T>
     public static Result<T> Failure(params Error[] errors) => new(false, default,errors);
     public static Result<T> NotFound() => new(false, default, []);
     public static Result<T> BadRequest() => new(false, default, []);
+    public static Result<T> BadRequest(params Error[] errors) => new(false, default, errors);
 
     // Functional helpers
     public Result<K> Map<K>(Func<T, K> map)
