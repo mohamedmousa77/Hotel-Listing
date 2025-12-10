@@ -1,9 +1,9 @@
 ﻿using HotelListing.Api.Contracts;
 using HotelListing.Api.Data;
 using HotelListing.Api.DTOs.Country;
+using HotelListing.Api.Results;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Runtime.InteropServices;
 
 namespace HotelListing.Api.Controllers;
 
@@ -15,22 +15,16 @@ public class CountriesController(ICountriesService countriesService) : Controlle
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ReadCountriesDto>>> GetCountries()
     {
-        var countries = await countriesService.GetCountriesAsync();
-        return Ok(countries);
+        var result = await countriesService.GetCountriesAsync();
+        return ToActionResult(result);
     }
 
     // GET: api/Countries/5
     [HttpGet("{id}")]
     public async Task<ActionResult<ReadCountryDto>> GetCountry(int id)
     {
-        var country = await countriesService.GetCountryAsync(id);
-
-        if (country == null)
-        {
-            return NotFound();
-        }
-
-        return country;
+        var result = await countriesService.GetCountryAsync(id);
+        return ToActionResult(result);
     }
 
     // PUT: api/Countries/5
@@ -39,14 +33,8 @@ public class CountriesController(ICountriesService countriesService) : Controlle
     public async Task<IActionResult> PutCountry(int id, [FromBody] UpdateCountryDto countryDto)
     {
 
-        if (id != countryDto.Id)
-        {
-            return BadRequest();
-        }
-
-        // Update the country details 
-        await countriesService.UpdateCountryAsync(id, countryDto);
-        return NoContent();
+        var result = await countriesService.UpdateCountryAsync(id, countryDto);
+        return ToActionResult(result);
     }
 
     // POST: api/Countries
@@ -54,17 +42,37 @@ public class CountriesController(ICountriesService countriesService) : Controlle
     [HttpPost]
     public async Task<ActionResult<Country>> PostCountry(CreateCountryDto countryDto)
     {
-        var country = await countriesService.CreateCountryAsync(countryDto);
-
-        return CreatedAtAction("GetCountry", new { id = country.Id }, country);
+        var result = await countriesService.CreateCountryAsync(countryDto);
+        if(!result.IsSuccess) return MapErrorsToResponse(result.Errors);
+        return CreatedAtAction(nameof(GetCountry), new { id = result.Value!.Id }, result.Value);
     }
 
     // DELETE: api/Countries/5
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteCountry(int id)
     {
-       await countriesService.DeleteCountryAsync(id);
-        return NoContent();
+        var result = await countriesService.DeleteCountryAsync(id);
+        return ToActionResult(result);
     }
 
+    private ActionResult<T> ToActionResult<T>(Result<T> result)
+        => result.IsSuccess ? Ok(result.Value) : MapErrorsToResponse(result.Errors);
+
+    private ActionResult ToActionResult(Result result)
+        => result.IsSuccess ? NoContent() : MapErrorsToResponse(result.Errors);
+
+    private ActionResult MapErrorsToResponse(Error[] errors)
+    {
+        if (errors is null || errors.Length == 0) return Problem();
+
+        var e = errors[0];
+        return e.Code switch
+        {
+            "NotFound" => NotFound(e.Description),
+            "BadRequest" => BadRequest(e.Description),
+            "Validation" => BadRequest(e.Description),
+            "Conflict" => Conflict(e.Description),
+            _ => Problem(detail: string.Join("; ", errors.Select(x => x.Description)), title: e.Code)
+        };
+    }
 }
