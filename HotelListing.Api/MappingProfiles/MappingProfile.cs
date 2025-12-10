@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using HotelListing.Api.Data;
+using HotelListing.Api.DTOs.Country;
 using HotelListing.Api.DTOs.Hotel;
 
 namespace HotelListing.Api.MappingProfiles;
@@ -10,8 +11,7 @@ public class HotelMappingProfile: Profile
     {
         CreateMap<Hotel, GetHotelDto>()
        .ForMember(d => d.Country, cfg => cfg.MapFrom<CountryNameResolver>());
-
-        CreateMap<CreateHotelDto, Hotel>();
+        CreateMap<Hotel, GetHotelSlimDto>();
         CreateMap<UpdateHotelDto, Hotel>();
     }
 }
@@ -20,10 +20,11 @@ public class CountryMappingProfile : Profile
 {
     public CountryMappingProfile()
     {
-        CreateMap<Hotel, GetHotelDto>()
-       .ForMember(d => d.Country, cfg => cfg.MapFrom<CountryNameResolver>());
-
-        CreateMap<CreateHotelDto, Hotel>();
+        CreateMap<Country, ReadCountryDto>()
+       .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
+        CreateMap<Country, ReadCountriesDto>()
+      .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
+        CreateMap<ReadCountryDto, Country>();
     }
 }
 

@@ -6,16 +6,14 @@ public readonly record struct Error(string Code, string Description)
 }
 public readonly record struct Result
 {
-
     public bool IsSuccess { get; }
     public Error[] Errors {get;}
-
     private Result(bool isSuccess, Error[] errors)
         => (IsSuccess, Errors) = (isSuccess, errors);
+
     public static Result Success() => new (true, Array.Empty<Error>());
     public static Result Failure(params Error[] errors)=> new (false, errors);
     public static Result NotFound(params Error[] errors) => new(false, errors);
-
     public static Result BadRequest(params Error[] errors) => new(false, errors);
 
     public static Result Combine(params Result[] Result)

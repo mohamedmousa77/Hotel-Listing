@@ -1,15 +1,13 @@
 ﻿using HotelListing.Api.Contracts;
 using HotelListing.Api.Data;
 using HotelListing.Api.DTOs.Country;
-using HotelListing.Api.Results;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace HotelListing.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class CountriesController(ICountriesService countriesService) : ControllerBase
+public class CountriesController(ICountriesService countriesService) : BaseApiController
 {
     // GET: api/Countries
     [HttpGet]
@@ -43,7 +41,7 @@ public class CountriesController(ICountriesService countriesService) : Controlle
     public async Task<ActionResult<Country>> PostCountry(CreateCountryDto countryDto)
     {
         var result = await countriesService.CreateCountryAsync(countryDto);
-        if(!result.IsSuccess) return MapErrorsToResponse(result.Errors);
+        if (!result.IsSuccess) return MapErrorsToResponse(result.Errors);
         return CreatedAtAction(nameof(GetCountry), new { id = result.Value!.Id }, result.Value);
     }
 
@@ -53,26 +51,5 @@ public class CountriesController(ICountriesService countriesService) : Controlle
     {
         var result = await countriesService.DeleteCountryAsync(id);
         return ToActionResult(result);
-    }
-
-    private ActionResult<T> ToActionResult<T>(Result<T> result)
-        => result.IsSuccess ? Ok(result.Value) : MapErrorsToResponse(result.Errors);
-
-    private ActionResult ToActionResult(Result result)
-        => result.IsSuccess ? NoContent() : MapErrorsToResponse(result.Errors);
-
-    private ActionResult MapErrorsToResponse(Error[] errors)
-    {
-        if (errors is null || errors.Length == 0) return Problem();
-
-        var e = errors[0];
-        return e.Code switch
-        {
-            "NotFound" => NotFound(e.Description),
-            "BadRequest" => BadRequest(e.Description),
-            "Validation" => BadRequest(e.Description),
-            "Conflict" => Conflict(e.Description),
-            _ => Problem(detail: string.Join("; ", errors.Select(x => x.Description)), title: e.Code)
-        };
     }
 }
