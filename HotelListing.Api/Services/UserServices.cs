@@ -4,11 +4,14 @@ using HotelListing.Api.Data;
 using HotelListing.Api.DTOs.Auth;
 using HotelListing.Api.Results;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 
 namespace HotelListing.Api.Services;
 
-public class UserServices(UserManager<ApplicationUser> userManager) : IUserServices
+public class UserServices(UserManager<ApplicationUser> userManager, IConfiguration configuration) : IUserServices
 {
 
     public async Task<Result<RegisteredUserDto>> RegisterAsync(RegisterUserDto registerUserDto)
@@ -54,7 +57,43 @@ public class UserServices(UserManager<ApplicationUser> userManager) : IUserServi
         {
             return Result<string>.Failure(new Error(ErrorCodes.BadRequest, "Invalid credentials!"));
         }
-        return Result<string>.Success("Login successful");
 
+        // Issue token
+        string token = await GenerateToken(user);
+        return Result<string>.Success(token);
+
+    }
+
+    public async Task<string> GenerateToken(ApplicationUser user)
+    {
+        // set basic user claims.
+        var claims = new List<Claim>
+        {
+            new Claim (JwtRegisteredClaimNames.Sub, user.Id),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim(JwtRegisteredClaimNames.Name, user.FullName)
+        };
+
+        // set user role claims 
+        var roles = await userManager.GetRolesAsync(user);
+        var roleClaims = roles.Select(x => new Claim(ClaimTypes.Role, x)).ToList();
+        claims = claims.Union(roleClaims).ToList();
+
+        // Set JWT credentials key
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:Key"]));
+        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+
+        // create an encoded token
+        var token = new JwtSecurityToken(
+            issuer: configuration["JwtSettings:Issuer"],
+            audience: configuration["JwtSettings:Audience"],
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(Convert.ToInt32(configuration["JwtSettings:Issuer"])),
+            signingCredentials: credentials
+        );
+
+        // Return Token value
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 }
