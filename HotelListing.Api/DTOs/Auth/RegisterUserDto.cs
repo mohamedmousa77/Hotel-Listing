@@ -12,4 +12,6 @@ public class RegisterUserDto
     public string FirstName { get; set; } = string.Empty;
     [Required, MinLength(100)]
     public string LastName { get; set; } = string.Empty;
+
+    public string Role { get; set; } = string.Empty;
 }

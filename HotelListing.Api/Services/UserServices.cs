@@ -33,12 +33,15 @@ public class UserServices(UserManager<ApplicationUser> userManager, IConfigurati
 
         }
 
+        await userManager.AddToRoleAsync(user, registerUserDto.Role);
+
         var registeredUserDto = new RegisteredUserDto
         {
             Id = user.Id,
             Email = user.Email,
             FirstName = user.FirstName,
-            LastName = user.LastName
+            LastName = user.LastName,
+            Role = registerUserDto.Role
         };
         return Result<RegisteredUserDto>.Success(registeredUserDto);
     }
