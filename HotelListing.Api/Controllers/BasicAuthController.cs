@@ -8,7 +8,7 @@ namespace HotelListing.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[Authorize(AuthenticationSchemes = AuthenticationDefaults.BasicScheme)]
+[Authorize(AuthenticationSchemes = AuthenticationDefaults.DefaultScheme)]
 
 public class BasicAuthController : ControllerBase
 {
