@@ -1,7 +1,6 @@
 ﻿namespace HotelListing.Api.DTOs.Bookings;
 
-public record CreateBookingDto(
-    int HotelId,
+public record UpdateBookingDto(
     DateOnly CheckInDate,
     DateOnly CheckOutDate,
     int Guests
