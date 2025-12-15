@@ -1,19 +1,28 @@
-﻿using HotelListing.Api.Contracts;
-using HotelListing.Api.Data;
+﻿using HotelListing.Api.AuthorizationFilters;
+using HotelListing.Api.Contracts;
 using HotelListing.Api.DTOs.Bookings;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HotelListing.Api.Controllers;
 
 [Route("api/hotels/{hotelId:int}/bookings")]
 [ApiController]
-public class HotelBookingsContrller(IBookingServices bookingServices) : BaseApiController
-{
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<GetBookingsDto>>>  GetBookings([FromRoute] int hotelId)
+[Authorize]
+public class BookingsContrller(IBookingServices bookingServices) : BaseApiController
+{ 
+    [HttpGet("/admin")]
+    [HotelOrSystemAdmin]
+    public async Task<ActionResult<IEnumerable<GetBookingsDto>>> GetBookingsForAdmin([FromRoute] int hotelId)
     {
-        var result = await bookingServices.GetBookingsAsync(hotelId);
+        var result = await bookingServices.GetBookingsForHotelAsync(hotelId);
+        return ToActionResult(result);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<GetBookingsDto>>> GetBookings([FromRoute] int hotelId)
+    {
+        var result = await bookingServices.GetUserBookingsAsync(hotelId);
         return ToActionResult(result);
     }
     [HttpPost]
@@ -25,8 +34,8 @@ public class HotelBookingsContrller(IBookingServices bookingServices) : BaseApiC
 
     [HttpPut("{bookingId:int}")]
     public async Task<ActionResult<GetBookingsDto>> UpdateBooking(
-        [FromRoute] int hotelId, 
-        [FromRoute] int bookingId, 
+        [FromRoute] int hotelId,
+        [FromRoute] int bookingId,
         [FromBody] UpdateBookingDto updatedBookingDto)
     {
         var result = await bookingServices.UpdateBookingAsync(hotelId, bookingId, updatedBookingDto);
@@ -43,6 +52,7 @@ public class HotelBookingsContrller(IBookingServices bookingServices) : BaseApiC
     }
 
     [HttpPut("{bookingId:int}/admin/confirm")]
+    [HotelOrSystemAdmin]
     public async Task<ActionResult> ConfirmBookingByAdmin(
         [FromRoute] int hotelId,
         [FromRoute] int bookingId)
@@ -52,12 +62,13 @@ public class HotelBookingsContrller(IBookingServices bookingServices) : BaseApiC
     }
 
     [HttpPut("{bookingId:int}/admin/cancel")]
+    [HotelOrSystemAdmin]
     public async Task<ActionResult> CancelBookingByAdmin(
         [FromRoute] int hotelId,
         [FromRoute] int bookingId)
     {
         var result = await bookingServices.CancelBookingByAdminAsync(hotelId, bookingId);
         return ToActionResult(result);
-    } 
+    }
 
 }

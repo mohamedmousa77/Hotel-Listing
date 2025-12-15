@@ -4,6 +4,7 @@ using HotelListing.Api.Data;
 using HotelListing.Api.DTOs.Auth;
 using HotelListing.Api.Results;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration.UserSecrets;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -11,7 +12,9 @@ using System.Text;
 
 namespace HotelListing.Api.Services;
 
-public class UserServices(UserManager<ApplicationUser> userManager, IConfiguration configuration) : IUserServices
+public class UserServices(UserManager<ApplicationUser> userManager, IConfiguration configuration,
+    IHttpContextAccessor httpContextAccessor
+    ) : IUserServices
 {
 
     public async Task<Result<RegisteredUserDto>> RegisterAsync(RegisterUserDto registerUserDto)
@@ -46,7 +49,12 @@ public class UserServices(UserManager<ApplicationUser> userManager, IConfigurati
         return Result<RegisteredUserDto>.Success(registeredUserDto);
     }
 
-
+    public string UserId 
+        => httpContextAccessor?.HttpContext?.User?.
+                FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+        ?? httpContextAccessor?.HttpContext?.User?.
+                FindFirst(ClaimTypes.NameIdentifier)?.Value
+        ?? string.Empty;
     public async Task<Result<string>> LoginAsync(LoginUserDto loginUserDto)
     {
         var user = await userManager.FindByEmailAsync(loginUserDto.Email);
@@ -73,7 +81,7 @@ public class UserServices(UserManager<ApplicationUser> userManager, IConfigurati
         var claims = new List<Claim>
         {
             new Claim (JwtRegisteredClaimNames.Sub, user.Id),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(JwtRegisteredClaimNames.Name, user.FullName)
         };
@@ -84,7 +92,7 @@ public class UserServices(UserManager<ApplicationUser> userManager, IConfigurati
         claims = claims.Union(roleClaims).ToList();
 
         // Set JWT credentials key
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:Key"]));
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:Key"]!));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         // create an encoded token

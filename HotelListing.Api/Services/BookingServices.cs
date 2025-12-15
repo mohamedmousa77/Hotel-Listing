@@ -1,4 +1,6 @@
-﻿using HotelListing.Api.Constants;
+﻿using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using HotelListing.Api.Constants;
 using HotelListing.Api.Contracts;
 using HotelListing.Api.Data;
 using HotelListing.Api.Data.Enums;
@@ -10,120 +12,72 @@ using System.IdentityModel.Tokens.Jwt;
 
 namespace HotelListing.Api.Services;
 
-public class BookingServices(HotelListingDbContext context, IHttpContextAccessor httpContextAccessor) : IBookingServices
+public class BookingServices(HotelListingDbContext context, IUserServices userServices, IMapper mapper) : IBookingServices
 {
-    public async Task<Result<IEnumerable<GetBookingsDto>>> GetBookingsAsync(int hotelId)
+    public async Task<Result<IEnumerable<GetBookingsDto>>> GetBookingsForHotelAsync(int hotelId)
     {
         var hotelExists = await context.Hotels.AnyAsync(h => h.Id == hotelId);
-        if (!hotelExists)
-        {
+        if (!hotelExists)        
             return Result<IEnumerable<GetBookingsDto>>.NotFound();
-        }
+        
 
         var bookings = await context.Bookings
             .Where(b => b.HotelId == hotelId)
             .OrderBy(b => b.CheckIn)
-            .Select(b => new GetBookingsDto(
-                 b.Id,
-                 b.HotelId,
-                 b.Guests,
-                 b.Hotel!.Name,
-                 b.CheckIn,
-                 b.CheckOut,
-                 b.TotalPrice,
-                 b.Status.ToString(),
-                 b.CreatedAtUtc,
-                 b.UpdatedAtUtc)
-            ).ToListAsync();
+            .ProjectTo<GetBookingsDto>(mapper.ConfigurationProvider)
+            .ToListAsync();
 
         return Result<IEnumerable<GetBookingsDto>>.Success(bookings);
     }
 
+    public async Task<Result<IEnumerable<GetBookingsDto>>> GetUserBookingsAsync(int hotelId)
+    {
+        var userId = userServices.UserId;
+
+        var hotelExists = await context.Bookings.AnyAsync(h => h.Id == hotelId && h.UserId == userId);
+        if (!hotelExists)
+             return Result<IEnumerable<GetBookingsDto>>.NotFound();
+        
+        var bookings = await context.Bookings
+            .Where(b => b.HotelId == hotelId)
+            .OrderBy(b => b.CheckIn)
+            .ProjectTo<GetBookingsDto>(mapper.ConfigurationProvider)
+            .ToListAsync();
+
+        return Result<IEnumerable<GetBookingsDto>>.Success(bookings);
+    }
     public async Task<Result<GetBookingsDto>> CreateBookingAsync (CreateBookingDto newBookingDto)
     {
-        var userId = httpContextAccessor?.HttpContext?.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if(string.IsNullOrEmpty(userId))
-             return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Validation, "User is not authenticated."));
-
-        var nights = newBookingDto.CheckOutDate.DayNumber - newBookingDto.CheckInDate.DayNumber;
-        if (nights <= 0) 
-            return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Validation, "Check-out date must be after check-in date."));
-           
-        if(newBookingDto.Guests <= 0)
-            return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Validation, "Number of guests must be at least 1."));
-
-        var overlaps = await context.Bookings
-            .AnyAsync(b => b.HotelId == newBookingDto.HotelId
-                           && b.Status != BookingStatus.Canceled
-                           && b.CheckIn < newBookingDto.CheckOutDate
-                           && b.CheckOut > newBookingDto.CheckInDate
-                           && b.UserId == userId);
-
+        var userId = userServices.UserId;
+          
+        var overlaps = await IsOverLap(newBookingDto.HotelId, newBookingDto.CheckInDate, newBookingDto.CheckOutDate, userId);
         if (overlaps)
             return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Conflict, "You already have a booking that overlaps with the selected dates."));
 
         var hotel = await context.Hotels
             .Where(h => h.Id == newBookingDto.HotelId)
             .FirstOrDefaultAsync();
-        if (hotel is null)
-        {
+        if (hotel is null)        
             return Result<GetBookingsDto>.NotFound();
-        }
         
+
+        var nights = newBookingDto.CheckOutDate.DayNumber - newBookingDto.CheckInDate.DayNumber;
         var totalPrice = nights * hotel.PerNightRate;
-
-        var booking = new Booking
-        {
-            HotelId = newBookingDto.HotelId,
-            UserId = userId,
-            Guests = newBookingDto.Guests,
-            CheckIn = newBookingDto.CheckInDate,
-            CheckOut = newBookingDto.CheckOutDate,
-            TotalPrice = totalPrice,
-            Status = BookingStatus.Pending,
-            CreatedAtUtc = DateTime.UtcNow,
-            UpdatedAtUtc = DateTime.UtcNow
-        };
-
+        var booking = mapper.Map<Booking>(newBookingDto);
+        booking.UserId = userId;
         context.Bookings.Add(booking);
         await context.SaveChangesAsync();
 
-        var createdBooking = new GetBookingsDto(
-            booking.Id,
-            hotel.Id,
-            booking.Guests,
-            hotel.Name,
-            booking.CheckIn,
-            booking.CheckOut,
-            totalPrice,
-            BookingStatus.Pending.ToString(),
-            booking.CreatedAtUtc,
-            booking.UpdatedAtUtc
-        );
+        var result = mapper.Map<GetBookingsDto>(booking);
 
-        return Result<GetBookingsDto>.Success(createdBooking);
+        return Result<GetBookingsDto>.Success(result);
     }
 
-    public async Task<Result<GetBookingsDto>> UpdateBookingAsync(int hotelId, int bookingId, UpdateBookingDto updatedBooking)
+    public async Task<Result<GetBookingsDto>> UpdateBookingAsync(int hotelId, int bookingId, UpdateBookingDto updatedBookingDto)
     {
-        var userId = httpContextAccessor?.HttpContext?.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        
-        if (string.IsNullOrEmpty(userId))
-            return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Validation, "User is not authenticated."));
+        var userId = userServices.UserId;
 
-        var nights = updatedBooking.CheckOutDate.DayNumber - updatedBooking.CheckInDate.DayNumber;
-        if (nights <= 0)
-            return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Validation, "Check-out date must be after check-in date."));
-
-        if (updatedBooking.Guests <= 0)
-            return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Validation, "Number of guests must be at least 1."));
-
-        var overlaps = await context.Bookings
-            .AnyAsync(b => b.HotelId == hotelId
-                   && b.Status != BookingStatus.Canceled
-                   && b.CheckIn < updatedBooking.CheckOutDate
-                   && b.CheckOut > updatedBooking.CheckInDate
-                   && b.UserId == userId);
+        var overlaps =await IsOverLap(hotelId, updatedBookingDto.CheckInDate, updatedBookingDto.CheckOutDate, userId);
 
         if (overlaps)
             return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Conflict, "You already have a booking that overlaps with the selected dates."));
@@ -131,44 +85,40 @@ public class BookingServices(HotelListingDbContext context, IHttpContextAccessor
         var booking = await context.Bookings
             .Include(b => b.Hotel)
             .FirstOrDefaultAsync(b => b.Id == bookingId && b.HotelId == hotelId && b.UserId == userId);
-
-
         if (booking is null)
             return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.NotFound, $"Booking '{bookingId}' was not found!"));
         
         if(booking.Status == BookingStatus.Canceled)
             return Result<GetBookingsDto>.Failure(new Error(ErrorCodes.Conflict, "Cannot update a canceled booking."));
 
-
+        mapper.Map(updatedBookingDto, booking);
+        var nights = updatedBookingDto.CheckOutDate.DayNumber - updatedBookingDto.CheckInDate.DayNumber;
         var perNightRate = booking.Hotel!.PerNightRate;
-        booking.Guests =  updatedBooking.Guests;
-        booking.CheckIn = updatedBooking.CheckInDate;
-        booking.CheckOut = updatedBooking.CheckOutDate;
         booking.TotalPrice = nights * perNightRate;
         booking.UpdatedAtUtc = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
 
-        var updated = new GetBookingsDto(
-            booking.Id,
-            booking.HotelId,
-            booking.Guests,
-            booking.Hotel!.Name,
-            booking.CheckIn,
-            booking.CheckOut,
-            booking.TotalPrice,
-            booking.Status.ToString(),
-            booking.CreatedAtUtc,
-            booking.UpdatedAtUtc
-        );
+        var updated = mapper.Map<GetBookingsDto>(booking);
 
         return Result<GetBookingsDto>.Success(updated);
 
     }
 
+    private async Task<bool> IsOverLap(int hotelId, DateOnly checkIn, DateOnly checkOut, string userId)
+    {
+        return await context.Bookings
+            .AnyAsync(b => b.HotelId == hotelId
+                           && b.Status != BookingStatus.Canceled
+                           && b.CheckIn < checkOut
+                           && b.CheckOut > checkIn
+                           && b.UserId == userId);
+
+    }
+
     public async Task<Result> CancelBookingAsync(int hotelId, int bookingId)
     {
-        var userId = httpContextAccessor?.HttpContext?.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        var userId = userServices.UserId;
 
         if (string.IsNullOrEmpty(userId))
             return Result.Failure(new Error(ErrorCodes.Validation, "User is not authenticated."));
@@ -196,7 +146,7 @@ public class BookingServices(HotelListingDbContext context, IHttpContextAccessor
 
     public async Task<Result> CancelBookingByAdminAsync(int hotelId, int bookingId)
     {
-        var userId = httpContextAccessor?.HttpContext?.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        var userId = userServices.UserId;
 
         var isHotelAdmin = await context.HotelAdmins
             .AnyAsync(ha => ha.HotelId == hotelId && ha.UserId == userId);
@@ -225,7 +175,7 @@ public class BookingServices(HotelListingDbContext context, IHttpContextAccessor
 
     public async Task<Result> ConfirmBookingByAdminAsync(int hotelId, int bookingId)
     {
-        var userId = httpContextAccessor?.HttpContext?.User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        var userId = userServices.UserId;
 
         var isHotelAdmin = await context.HotelAdmins
             .AnyAsync(ha => ha.HotelId == hotelId && ha.UserId == userId);
@@ -251,4 +201,6 @@ public class BookingServices(HotelListingDbContext context, IHttpContextAccessor
 
         return Result.Success();
     }
+
+
 }
