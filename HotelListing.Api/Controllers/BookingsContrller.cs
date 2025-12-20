@@ -11,7 +11,7 @@ namespace HotelListing.Api.Controllers;
 [Authorize]
 public class BookingsContrller(IBookingServices bookingServices) : BaseApiController
 { 
-    [HttpGet("/admin")]
+    [HttpGet("admin")]
     [HotelOrSystemAdmin]
     public async Task<ActionResult<IEnumerable<GetBookingsDto>>> GetBookingsForAdmin([FromRoute] int hotelId)
     {
@@ -20,12 +20,14 @@ public class BookingsContrller(IBookingServices bookingServices) : BaseApiContro
     }
 
     [HttpGet]
+    [HotelOrSystemAdmin]
     public async Task<ActionResult<IEnumerable<GetBookingsDto>>> GetBookings([FromRoute] int hotelId)
     {
         var result = await bookingServices.GetUserBookingsAsync(hotelId);
         return ToActionResult(result);
     }
     [HttpPost]
+    [HotelOrSystemAdmin]
     public async Task<ActionResult<GetBookingsDto>> CreateBooking([FromRoute] int hotelId, [FromBody] CreateBookingDto newBooking)
     {
         var result = await bookingServices.CreateBookingAsync(newBooking);

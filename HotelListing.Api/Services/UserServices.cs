@@ -13,7 +13,7 @@ using System.Text;
 namespace HotelListing.Api.Services;
 
 public class UserServices(UserManager<ApplicationUser> userManager, IConfiguration configuration,
-    IHttpContextAccessor httpContextAccessor
+    IHttpContextAccessor httpContextAccessor, HotelListingDbContext context
     ) : IUserServices
 {
 
@@ -38,6 +38,17 @@ public class UserServices(UserManager<ApplicationUser> userManager, IConfigurati
 
         await userManager.AddToRoleAsync(user, registerUserDto.Role);
 
+        // If Hotel Admin, add to HotelAdmins table
+        if(registerUserDto.Role == "HotelAdmin")
+        {
+            var hotelAdmin = context.HotelAdmins.Add(
+                new HotelAdmin
+                {
+                    UserId = user.Id,
+                    HotelId = registerUserDto.AssociatedHotelId.GetValueOrDefault()
+                });
+            await context.SaveChangesAsync();
+        }
         var registeredUserDto = new RegisteredUserDto
         {
             Id = user.Id,

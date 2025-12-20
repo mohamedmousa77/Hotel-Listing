@@ -105,14 +105,23 @@ public class BookingServices(HotelListingDbContext context, IUserServices userSe
 
     }
 
-    private async Task<bool> IsOverLap(int hotelId, DateOnly checkIn, DateOnly checkOut, string userId)
+    private async Task<bool> IsOverLap(int hotelId, DateOnly checkIn, DateOnly checkOut, string userId, int? bookingId = null)
     {
-        return await context.Bookings
-            .AnyAsync(b => b.HotelId == hotelId
-                           && b.Status != BookingStatus.Canceled
-                           && b.CheckIn < checkOut
-                           && b.CheckOut > checkIn
-                           && b.UserId == userId);
+        var query =  context.Bookings
+            .Where(
+                b => b.HotelId == hotelId
+                && b.Status != BookingStatus.Canceled
+                && b.CheckIn < checkOut
+                && b.CheckOut > checkIn
+                && b.UserId == userId
+            ).AsQueryable();
+
+        if(bookingId.HasValue)
+        {
+            query = query.Where(b => b.Id != bookingId.Value);
+        }
+
+        return await query.AnyAsync();
 
     }
 
