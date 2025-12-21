@@ -3,11 +3,11 @@ using AutoMapper.QueryableExtensions;
 using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.DTOs.Bookings;
 using HotelListing.Api.Common.Constants;
+using HotelListing.Api.Common.Enums;
 using HotelListing.Api.Common.Models.Extentions;
 using HotelListing.Api.Common.Models.Paging;
 using HotelListing.Api.Common.Results;
 using HotelListing.Api.Domain;
-using HotelListing.Api.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace HotelListing.Api.Application.Services;
