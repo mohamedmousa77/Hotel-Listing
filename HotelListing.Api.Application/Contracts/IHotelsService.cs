@@ -1,4 +1,5 @@
 ﻿using HotelListing.Api.Application.DTOs.Hotel;
+using HotelListing.Api.Common.Models.Paging;
 using HotelListing.Api.Common.Results;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,7 +10,7 @@ namespace HotelListing.Api.Application.Contracts
         Task<Result<GetHotelDto>> CreateHotelAsync(CreateHotelDto hotelDto);
         Task<Result> DeleteHotelAsync(int id);
         Task<Result<GetHotelDto>> GetHotelAsync(int id);
-        Task<Result<IEnumerable<GetHotelDto>>> GetHotelsAsync();
+        Task<Result<PagedResult<GetHotelDto>>> GetHotelsAsync(PaginationParameters paginationParameters);
         Task<bool> HotelExistsAsync(int id);
         Task<bool> HotelExistsAsync(string name, int countryId);
         Task<Result> UpdateHotelAsync(int id, [FromBody] UpdateHotelDto hotelDto);

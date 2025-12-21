@@ -2,11 +2,15 @@
 using AutoMapper.QueryableExtensions;
 using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.DTOs.Country;
+using HotelListing.Api.Application.DTOs.Hotel;
 using HotelListing.Api.Common.Constants;
+using HotelListing.Api.Common.Models.Extentions;
+using HotelListing.Api.Common.Models.Paging;
 using HotelListing.Api.Common.Results;
 using HotelListing.Api.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Runtime.InteropServices;
 
 namespace HotelListing.Api.Application.Services;
 
@@ -20,7 +24,25 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
 
         return Result<IEnumerable<ReadCountriesDto>>.Success(countries);
     }
+    public async Task<Result<PagedResult<GetHotelDto>>> GetCountryHotelsAsync(
+        int countryId, PaginationParameters paginationParameters)
+    {
+        var exists = await CountryExistsAsync(countryId);
+        if (!exists)
+        {
+            return Result<PagedResult<GetHotelDto>>.Failure(
+                new Error(ErrorCodes.NotFound, $"Country with ID {countryId} was not found."));
+        }
 
+        var query = context.Hotels
+            .Where(h => h.CountryId == countryId)
+            .OrderBy(h => h.Name)
+            .ProjectTo<GetHotelDto>(mapper.ConfigurationProvider);
+
+        var paged = await query.ToPageResultAsync(paginationParameters);
+
+        return Result<PagedResult<GetHotelDto>>.Success(paged);
+    }
     public async Task<Result<ReadCountryDto>> GetCountryAsync(int id)
     {
 
@@ -118,8 +140,6 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
         }
 
     }
-
-
     public async Task<bool> CountryExistsAsync(int id) => context.Countries.Any(e => e.CountryId == id);
     public async Task<bool> CountryExistsAsync(string name)
         => await context.Countries.

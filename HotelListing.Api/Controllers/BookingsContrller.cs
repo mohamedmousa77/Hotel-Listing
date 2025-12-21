@@ -1,6 +1,7 @@
 ﻿using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.DTOs.Bookings;
 using HotelListing.Api.AuthorizationFilters;
+using HotelListing.Api.Common.Models.Paging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,30 +11,31 @@ namespace HotelListing.Api.Controllers;
 [ApiController]
 [Authorize]
 public class BookingsContrller(IBookingServices bookingServices) : BaseApiController
-{ 
-    [HttpGet("admin")]
-    [HotelOrSystemAdmin]
-    public async Task<ActionResult<IEnumerable<GetBookingsDto>>> GetBookingsForAdmin([FromRoute] int hotelId)
-    {
-        var result = await bookingServices.GetBookingsForHotelAsync(hotelId);
-        return ToActionResult(result);
-    }
-
+{
     [HttpGet]
-    [HotelOrSystemAdmin]
-    public async Task<ActionResult<IEnumerable<GetBookingsDto>>> GetBookings([FromRoute] int hotelId)
+    public async Task<ActionResult<PagedResult<GetBookingsDto>>> GetBookings(
+        [FromRoute] int hotelId,
+        [FromQuery] PaginationParameters paginationParameters)
     {
-        var result = await bookingServices.GetUserBookingsAsync(hotelId);
+        var result = await bookingServices.GetUserBookingsAsync(hotelId, paginationParameters);
         return ToActionResult(result);
     }
     [HttpPost]
-    [HotelOrSystemAdmin]
     public async Task<ActionResult<GetBookingsDto>> CreateBooking([FromRoute] int hotelId, [FromBody] CreateBookingDto newBooking)
     {
         var result = await bookingServices.CreateBookingAsync(newBooking);
         return ToActionResult(result);
     }
 
+    [HttpGet("admin")]
+    [HotelOrSystemAdmin]
+    public async Task<ActionResult<PagedResult<GetBookingsDto>>> GetBookingsForAdmin(
+        [FromRoute] int hotelId,
+        [FromQuery] PaginationParameters paginationParameters)
+    {
+        var result = await bookingServices.GetBookingsForHotelAsync(hotelId,paginationParameters );
+        return ToActionResult(result);
+    }
     [HttpPut("{bookingId:int}")]
     public async Task<ActionResult<GetBookingsDto>> UpdateBooking(
         [FromRoute] int hotelId,
