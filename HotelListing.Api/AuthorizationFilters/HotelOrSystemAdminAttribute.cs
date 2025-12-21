@@ -1,5 +1,5 @@
-﻿using HotelListing.Api.Data;
-using Microsoft.AspNetCore.Http;
+﻿using HotelListing.Api.Common.Constants;
+using HotelListing.Api.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
@@ -22,18 +22,18 @@ public class HotelOrSystemAdminFilter(HotelListingDbContext dbContext) : IAuthor
     {
         var user = context.HttpContext.User;
 
-        if(!user.Identity?.IsAuthenticated == false)
+        if (!user.Identity?.IsAuthenticated == false)
         {
             context.Result = new UnauthorizedResult();
             return;
         }
 
         //If user is global administrator, allow
-        if (user.IsInRole("Administrator"))
+        if (user.IsInRole(RoleNames.Administrator))
         {
             return;
         }
-                
+
         var userId = user.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
            ?? user.
                 FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -45,8 +45,8 @@ public class HotelOrSystemAdminFilter(HotelListingDbContext dbContext) : IAuthor
 
         context.RouteData.Values.TryGetValue("hotelId", out var hotelIdObj);
         int.TryParse(hotelIdObj?.ToString(), out int hotelID);
-        
-        if(hotelID == 0)
+
+        if (hotelID == 0)
         {
             context.Result = new ForbidResult();
             return;
@@ -54,7 +54,7 @@ public class HotelOrSystemAdminFilter(HotelListingDbContext dbContext) : IAuthor
 
         var isHotelAdmin = await dbContext.HotelAdmins
             .AnyAsync(hu => hu.HotelId == hotelID && hu.UserId == userId);
-        if(!isHotelAdmin)
+        if (!isHotelAdmin)
         {
             context.Result = new ForbidResult();
             return;

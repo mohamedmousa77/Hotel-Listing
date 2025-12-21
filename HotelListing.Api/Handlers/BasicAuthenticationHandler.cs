@@ -1,8 +1,6 @@
-﻿using HotelListing.Api.Contracts;
-using HotelListing.Api.Data;
-using HotelListing.Api.DTOs.Auth;
+﻿using HotelListing.Api.Application.Contracts;
+using HotelListing.Api.Application.DTOs.Auth;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
 using System.Text;
@@ -19,20 +17,20 @@ public class BasicAuthenticationHandler(
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if(!Request.Headers.TryGetValue("Authorization", out var authHeaderValues))
+        if (!Request.Headers.TryGetValue("Authorization", out var authHeaderValues))
         {
             return AuthenticateResult.NoResult();
         }
 
         var authHeader = authHeaderValues.ToString();
-        if(string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase) )
+        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
         {
             return AuthenticateResult.NoResult();
         }
         var token = authHeader["Basic ".Length..].Trim();
         string decoded;
         try
-        { 
+        {
             var credentialsBytes = Convert.FromBase64String(token);
             decoded = Encoding.UTF8.GetString(credentialsBytes);
         }
@@ -43,7 +41,7 @@ public class BasicAuthenticationHandler(
         }
 
         var separatorIndex = decoded.IndexOf(':');
-        if(separatorIndex <= 0)
+        if (separatorIndex <= 0)
         {
             return AuthenticateResult.Fail("Invalid Basic Authorization credentials format. ");
         }
@@ -59,8 +57,8 @@ public class BasicAuthenticationHandler(
 
         var result = await userServices.LoginAsync(loginDto);
 
-        if (!result.IsSuccess) 
-        { 
+        if (!result.IsSuccess)
+        {
             return AuthenticateResult.Fail("Invalid username or password. ");
         }
 

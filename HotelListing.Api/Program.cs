@@ -1,9 +1,9 @@
-using HotelListing.Api.Constants;
-using HotelListing.Api.Contracts;
-using HotelListing.Api.Data;
+using HotelListing.Api.Application.Contracts;
+using HotelListing.Api.Application.Services;
+using HotelListing.Api.Common.Constants;
+using HotelListing.Api.Common.Models;
+using HotelListing.Api.Domain;
 using HotelListing.Api.Handlers;
-using HotelListing.Api.MappingProfiles;
-using HotelListing.Api.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -22,6 +22,14 @@ builder.Services.AddDbContext<HotelListingDbContext>(options =>
 builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddEntityFrameworkStores<HotelListingDbContext>();
 builder.Services.AddHttpContextAccessor();
+
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()
+    ?? new JwtSettings();
+if (string.IsNullOrWhiteSpace(jwtSettings.Key))
+{
+    throw new InvalidOperationException("JWT Key is not configured.");
+}
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -37,13 +45,13 @@ builder.Services.AddAuthentication(options =>
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
-            ValidAudience = builder.Configuration["JwtSettings:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:Key"])),
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Key)),
             ClockSkew = TimeSpan.Zero,
         };
     })
-.AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>(AuthenticationDefaults.DefaultScheme, _ => {  })
+.AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>(AuthenticationDefaults.DefaultScheme, _ => { })
 .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(AuthenticationDefaults.ApiKeyScheme, _ => { });
 
 builder.Services.AddAuthorization();
@@ -54,7 +62,7 @@ builder.Services.AddScoped<IUserServices, UserServices>();
 builder.Services.AddScoped<IBookingServices, BookingServices>();
 builder.Services.AddScoped<IApiKeyValidatorService, ApiKeyValidatorService>();
 
-builder.Services.AddAutoMapper(cfg =>{ }, Assembly.GetExecutingAssembly());
+builder.Services.AddAutoMapper(cfg => { }, Assembly.GetExecutingAssembly());
 
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
@@ -91,7 +99,7 @@ else
     app.UseHttpsRedirection();
 }
 
-    app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 
 app.UseAuthorization();
 

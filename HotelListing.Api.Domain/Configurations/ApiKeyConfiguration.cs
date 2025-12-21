@@ -1,0 +1,21 @@
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace HotelListing.Api.Domain.Configurations;
+
+public class ApiKeyConfiguration : IEntityTypeConfiguration<ApiKey>
+{
+    public void Configure(EntityTypeBuilder<ApiKey> builder)
+    {
+        builder.HasIndex(k => k.Key).IsUnique();
+        builder.HasData(
+            new ApiKey
+            {
+                Id = 1,
+                AppName = "app",
+                CreatedAtUtc = new DateTimeOffset(2025, 01, 01, 0, 0, 0, TimeSpan.Zero),
+                Key = "dXNlcjFAbG9jYWxob3N0LmNvbTpQQHNzrbd29yZDE="
+            }
+        );
+    }
+}
