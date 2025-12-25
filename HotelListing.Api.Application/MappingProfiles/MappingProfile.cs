@@ -22,10 +22,15 @@ public class CountryMappingProfile : Profile
     public CountryMappingProfile()
     {
         CreateMap<Country, GetCountryDto>()
-       .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
+            .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
         CreateMap<Country, GetCountriesDto>()
-      .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
+            .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
         CreateMap<GetCountryDto, Country>();
+
+        CreateMap<Country, UpdateCountryDto>()
+            .ForMember(d => d.Id, opt => opt.MapFrom(s => s.CountryId))
+            .ReverseMap()
+            .ForMember(d => d.CountryId, opt => opt.MapFrom(s => s.Id));
     }
 }
 

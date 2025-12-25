@@ -16,11 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("HotelListingDbConnectionString");
+
 builder.Services.AddDbContext<HotelListingDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 builder.Services.AddIdentityApiEndpoints<ApplicationUser>()
     .AddEntityFrameworkStores<HotelListingDbContext>();
+
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
@@ -30,13 +32,13 @@ if (string.IsNullOrWhiteSpace(jwtSettings.Key))
 {
     throw new InvalidOperationException("JWT Key is not configured.");
 }
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(
+}).AddJwtBearer(
     options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -65,6 +67,7 @@ builder.Services.AddScoped<IApiKeyValidatorService, ApiKeyValidatorService>();
 builder.Services.AddAutoMapper(cfg => { }, Assembly.GetExecutingAssembly());
 
 builder.Services.AddControllers()
+    .AddNewtonsoftJson()
     .AddJsonOptions(opt =>
     {
         opt.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;

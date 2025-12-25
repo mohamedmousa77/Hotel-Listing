@@ -1,4 +1,5 @@
-﻿using HotelListing.Api.Application.Contracts;
+﻿using Azure;
+using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.DTOs.Country;
 using HotelListing.Api.Application.DTOs.Hotel;
 using HotelListing.Api.Common.Constants;
@@ -6,6 +7,7 @@ using HotelListing.Api.Common.Models.Filtering;
 using HotelListing.Api.Common.Models.Paging;
 using HotelListing.Api.Domain;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HotelListing.Api.Controllers;
@@ -15,7 +17,7 @@ namespace HotelListing.Api.Controllers;
 [Authorize]
 public class CountriesController(ICountriesService countriesService) : BaseApiController
 {
-    // GET: api/Countries
+
     [HttpGet]
     public async Task<ActionResult<IEnumerable<GetCountriesDto>>> GetCountries(CountryFilterParameters countryFilterParameters)
     {
@@ -34,7 +36,6 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
         return ToActionResult(result);
     }
 
-    // GET: api/Countries/5
     [HttpGet("{id}")]
     public async Task<ActionResult<GetCountryDto>> GetCountry(int id)
     {
@@ -42,8 +43,6 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
         return ToActionResult(result);
     }
 
-    // PUT: api/Countries/5
-    // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
     [HttpPut("{id}")]
     [Authorize(Roles = RoleNames.Administrator)]
     public async Task<IActionResult> PutCountry(int id, [FromBody] UpdateCountryDto countryDto)
@@ -53,8 +52,17 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
         return ToActionResult(result);
     }
 
-    // POST: api/Countries
-    // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+    [HttpPatch("{id}")]
+    [Authorize(Roles = RoleNames.Administrator)]
+    public async Task<IActionResult> PatchCountry(int id, [FromBody] JsonPatchDocument<UpdateCountryDto> patchDto)
+    {
+        if (patchDto == null)
+            return BadRequest("Patch document is required");
+
+        var result = await countriesService.PatchCountryAsync(id, patchDto);
+        return ToActionResult(result);
+    }
+
     [HttpPost]
     [Authorize(Roles = RoleNames.Administrator)]
     public async Task<ActionResult<Country>> PostCountry(CreateCountryDto countryDto)
@@ -64,7 +72,6 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
         return CreatedAtAction(nameof(GetCountry), new { id = result.Value!.Id }, result.Value);
     }
 
-    // DELETE: api/Countries/5
     [HttpDelete("{id}")]
     [Authorize(Roles = RoleNames.Administrator)]
     public async Task<IActionResult> DeleteCountry(int id)
