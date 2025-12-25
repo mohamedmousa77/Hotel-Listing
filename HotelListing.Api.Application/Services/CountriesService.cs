@@ -5,55 +5,94 @@ using HotelListing.Api.Application.DTOs.Country;
 using HotelListing.Api.Application.DTOs.Hotel;
 using HotelListing.Api.Common.Constants;
 using HotelListing.Api.Common.Models.Extentions;
+using HotelListing.Api.Common.Models.Filtering;
 using HotelListing.Api.Common.Models.Paging;
 using HotelListing.Api.Common.Results;
 using HotelListing.Api.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Runtime.InteropServices;
 
 namespace HotelListing.Api.Application.Services;
 
 public class CountriesService(HotelListingDbContext context, IMapper mapper) : ICountriesService
 {
-    public async Task<Result<IEnumerable<ReadCountriesDto>>> GetCountriesAsync()
+    public async Task<Result<IEnumerable<GetCountriesDto>>> GetCountriesAsync(CountryFilterParameters filters)
     {
-        var countries = await context.Countries
-            .ProjectTo<ReadCountriesDto>(mapper.ConfigurationProvider)
+        var query = context.Countries.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(filters.Search))
+        {
+           var term = filters.Search.Trim();
+            query = query.Where(c => EF.Functions.Like(c.Name, $"%{term}%")
+            || EF.Functions.Like(c.ShortName, $"%{term}%"));
+        }
+        var countries = await query
+            .ProjectTo<GetCountriesDto>(mapper.ConfigurationProvider)
             .ToListAsync();
 
-        return Result<IEnumerable<ReadCountriesDto>>.Success(countries);
+        return Result<IEnumerable<GetCountriesDto>>.Success(countries);
     }
-    public async Task<Result<PagedResult<GetHotelDto>>> GetCountryHotelsAsync(
-        int countryId, PaginationParameters paginationParameters)
+    public async Task<Result<GetCountryHotelsDto>> GetCountryHotelsAsync(
+        int countryId, PaginationParameters paginationParameters, CountryFilterParameters filters)
     {
         var exists = await CountryExistsAsync(countryId);
         if (!exists)
         {
-            return Result<PagedResult<GetHotelDto>>.Failure(
+            return Result<GetCountryHotelsDto>.Failure(
                 new Error(ErrorCodes.NotFound, $"Country with ID {countryId} was not found."));
         }
 
-        var query = context.Hotels
+        var countryName = await context.Countries
+            .Where(c => c.CountryId == countryId)
+            .Select(q => q.Name)
+            .SingleAsync();
+
+        var hotelQuery = context.Hotels
             .Where(h => h.CountryId == countryId)
-            .OrderBy(h => h.Name)
-            .ProjectTo<GetHotelDto>(mapper.ConfigurationProvider);
+            .AsQueryable();
 
-        var paged = await query.ToPageResultAsync(paginationParameters);
+        if(!string.IsNullOrWhiteSpace(filters.Search))
+        {
+            var term = filters.Search.Trim();
+            hotelQuery = hotelQuery.Where(h => EF.Functions.Like(h.Name, $"%{term}%"));
+        }
 
-        return Result<PagedResult<GetHotelDto>>.Success(paged);
+        hotelQuery = (filters.SortBy?.Trim().ToLowerInvariant()) switch
+        {
+            "name" => filters.IsSortDescending
+                ? hotelQuery.OrderByDescending(h => h.Name)
+                : hotelQuery.OrderBy(h => h.Name),
+            "rating" => filters.IsSortDescending
+                ? hotelQuery.OrderByDescending(h => h.Rating)
+                : hotelQuery.OrderBy(h => h.Rating),
+
+            _ => hotelQuery.OrderBy(h => h.Name)
+        };
+
+        var pagedHotels = await hotelQuery
+            .ProjectTo<GetHotelSlimDto>(mapper.ConfigurationProvider)
+            .ToPageResultAsync(paginationParameters);
+
+        var result = new GetCountryHotelsDto
+        {
+            Id = countryId,
+            Name = countryName,
+            Hotels = pagedHotels
+        };
+
+        return Result<GetCountryHotelsDto>.Success(result);
     }
-    public async Task<Result<ReadCountryDto>> GetCountryAsync(int id)
+    public async Task<Result<GetCountryDto>> GetCountryAsync(int id)
     {
 
         var country = await context.Countries
             .Where(c => c.CountryId == id)
-            .ProjectTo<ReadCountryDto>(mapper.ConfigurationProvider)
+            .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
             .FirstOrDefaultAsync();
 
         return country is null
-            ? Result<ReadCountryDto>.Failure(new Error(ErrorCodes.NotFound, $"Country {id} was not found. "))
-            : Result<ReadCountryDto>.Success(country);
+            ? Result<GetCountryDto>.Failure(new Error(ErrorCodes.NotFound, $"Country {id} was not found. "))
+            : Result<GetCountryDto>.Success(country);
     }
 
     public async Task<Result> UpdateCountryAsync(int id, [FromBody] UpdateCountryDto countryDto)
@@ -89,14 +128,14 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
             return Result.Failure(new Error(ErrorCodes.Failure, "An unexpected errror occurred while updating the country."));
         }
     }
-    public async Task<Result<ReadCountryDto>> CreateCountryAsync(CreateCountryDto countryDto)
+    public async Task<Result<GetCountryDto>> CreateCountryAsync(CreateCountryDto countryDto)
     {
         try
         {
             var exists = await CountryExistsAsync(countryDto.Name);
             if (exists)
             {
-                return Result<ReadCountryDto>
+                return Result<GetCountryDto>
                     .Failure(new Error(ErrorCodes.Conflict, $"Country with the name: {countryDto.Name} already exists"));
             }
 
@@ -106,15 +145,15 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
 
             var resultDto = await context.Countries
                 .Where(c => c.CountryId == country.CountryId)
-                .ProjectTo<ReadCountryDto>(mapper.ConfigurationProvider)
+                .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
                 .FirstAsync();
 
 
-            return Result<ReadCountryDto>.Success(resultDto);
+            return Result<GetCountryDto>.Success(resultDto);
         }
         catch (Exception)
         {
-            return Result<ReadCountryDto>.Failure(new Error(ErrorCodes.Failure, "An unexpected errror occurred while creating the country."));
+            return Result<GetCountryDto>.Failure(new Error(ErrorCodes.Failure, "An unexpected errror occurred while creating the country."));
         }
 
     }

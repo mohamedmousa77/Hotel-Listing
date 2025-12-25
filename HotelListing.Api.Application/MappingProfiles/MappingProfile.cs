@@ -11,7 +11,7 @@ public class HotelMappingProfile : Profile
     public HotelMappingProfile()
     {
         CreateMap<Hotel, GetHotelDto>()
-            .ForMember(d => d.Country, cfg => cfg.MapFrom<CountryNameResolver>());
+            .ForMember(d => d.CountryName, cfg => cfg.MapFrom<CountryNameResolver>());
         CreateMap<Hotel, GetHotelSlimDto>();
         CreateMap<UpdateHotelDto, Hotel>();
     }
@@ -21,11 +21,11 @@ public class CountryMappingProfile : Profile
 {
     public CountryMappingProfile()
     {
-        CreateMap<Country, ReadCountryDto>()
+        CreateMap<Country, GetCountryDto>()
        .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
-        CreateMap<Country, ReadCountriesDto>()
+        CreateMap<Country, GetCountriesDto>()
       .ForMember(d => d.Id, cfg => cfg.MapFrom(s => s.CountryId));
-        CreateMap<ReadCountryDto, Country>();
+        CreateMap<GetCountryDto, Country>();
     }
 }
 
