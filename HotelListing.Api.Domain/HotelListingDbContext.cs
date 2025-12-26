@@ -23,9 +23,29 @@ public class HotelListingDbContext(DbContextOptions<HotelListingDbContext> optio
 
         builder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
 
-
         builder.Entity<Hotel>()
             .Property(h => h.PerNightRate)
             .HasColumnType("decimal(18,2)");
+
+        builder.Entity<Country>()
+            .HasIndex(c => c.Name)
+            .HasDatabaseName("IX_Countries_Name");
+
+        builder.Entity<Country>()
+            .HasIndex(c => c.ShortName)
+            .HasDatabaseName("IX_Countries_ShortName");
+
+        builder.Entity<Hotel>()
+            .HasIndex(h => h.Name)
+            .HasDatabaseName("IX_Hotel_Name");
+
+        builder.Entity<Hotel>()
+            .HasIndex(h => h.CountryId)
+            .HasDatabaseName("IX_Hotel_CountryId");
+
+        builder.Entity<Hotel>()
+            .HasIndex(h => new { h.CountryId, h.Rating})
+            .HasDatabaseName("IX_Hotel_CountryId_Rating");
+
     }
 }

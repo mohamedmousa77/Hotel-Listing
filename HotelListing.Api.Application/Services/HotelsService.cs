@@ -40,14 +40,18 @@ public class HotelsService(
         if (filters.MaxPrice.HasValue)        
             query = query.Where(h => h.PerNightRate <= filters.MaxPrice);
         
-        if (!string.IsNullOrWhiteSpace(filters.Location))        
-            query = query.Where(h => h.Address != null && h.Address.ToLower().Contains(filters.Location.Trim().ToLower()));
-        
-        if(!string.IsNullOrWhiteSpace(filters.Search))
+        if (!string.IsNullOrWhiteSpace(filters.Location))
+        {
+            var location = filters.Location.Trim().ToLower();
+            query = query.Where(h => h.Address != null && EF.Functions.Like(h.Address, $"%{location}%") );
+
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.Search))
         {
             var genericSearch = filters.Search.Trim().ToLower();
-            query = query.Where(h => h.Name.ToLower().Contains(genericSearch) 
-            || (h.Address.ToLower().Contains(genericSearch)));
+            query = query.Where(h => EF.Functions.Like(h.Name, $"%{genericSearch}%") ||
+                                    EF.Functions.Like(h.Address, $"%{genericSearch}%") );
         }
 
         query = filters.SortBy?.ToLower() switch
@@ -102,10 +106,7 @@ public class HotelsService(
         await context.SaveChangesAsync();
 
 
-        var resultObj = await context.Hotels
-            .Where(h => h.Id == hotel.Id)
-            .ProjectTo<GetHotelDto>(mapper.ConfigurationProvider)
-            .FirstAsync();
+        var resultObj = mapper.Map<GetHotelDto>(hotel);
 
 
         return Result<GetHotelDto>.Success(resultObj);
@@ -134,6 +135,7 @@ public class HotelsService(
 
         mapper.Map(hotelDto, hotel);
         context.Hotels.Update(hotel);
+        context.Entry(hotel).State = EntityState.Modified;
         await context.SaveChangesAsync();
 
         return Result.Success();
@@ -156,6 +158,9 @@ public class HotelsService(
 
     public async Task<bool> HotelExistsAsync(int id) => await context.Hotels.AnyAsync(e => e.Id == id);
     public async Task<bool> HotelExistsAsync(string name, int countryId)
-        => await context.Hotels.AnyAsync(e => e.Name.ToLower().Trim() == name.ToLower().Trim() && e.CountryId == countryId);
-
+    {
+        var normalizedName = name.ToLower().Trim();
+        return await context.Hotels.AnyAsync(e => e.Name.ToLower().Trim() == normalizedName && 
+                                                e.CountryId == countryId);
+    }
 }

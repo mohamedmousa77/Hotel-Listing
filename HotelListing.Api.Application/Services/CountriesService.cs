@@ -28,6 +28,7 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
             || EF.Functions.Like(c.ShortName, $"%{term}%"));
         }
         var countries = await query
+            .AsNoTracking()
             .ProjectTo<GetCountriesDto>(mapper.ConfigurationProvider)
             .ToListAsync();
 
@@ -71,6 +72,7 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
         };
 
         var pagedHotels = await hotelQuery
+            .AsNoTracking()
             .ProjectTo<GetHotelSlimDto>(mapper.ConfigurationProvider)
             .ToPageResultAsync(paginationParameters);
 
@@ -87,6 +89,7 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
     {
 
         var country = await context.Countries
+            .AsNoTracking()
             .Where(c => c.CountryId == id)
             .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
             .FirstOrDefaultAsync();
@@ -144,11 +147,7 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
             context.Countries.Add(country);
             await context.SaveChangesAsync();
 
-            var resultDto = await context.Countries
-                .Where(c => c.CountryId == country.CountryId)
-                .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
-                .FirstAsync();
-
+            var resultDto = mapper.Map<GetCountryDto>(country);
 
             return Result<GetCountryDto>.Success(resultDto);
         }
@@ -197,12 +196,18 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
         if (countryDto.Id != id)
             return Result.BadRequest(new Error(ErrorCodes.Validation, $"Cannot modify the Id field."));
 
+        string normalizedName = countryDto.Name.Trim().ToLower();
         var duplicatedExists = await context.Countries
-            .AnyAsync(c => c.Name.Trim().ToLower() == countryDto.Name.Trim().ToLower() && c.CountryId != id);
+            .AnyAsync(c => c.Name.Trim().ToLower() == normalizedName && c.CountryId != id);
         if(duplicatedExists)
             return Result.BadRequest(new Error(ErrorCodes.Conflict, $"Country with name '{countryDto.Name}' is already exists. "));
 
         mapper.Map(countryDto,country);
+
+        // Questo nel caso in cui il tracking e` stato attivato globally (Nel Program.cs)
+        // Quindi devo avvisare EF che l'entita` e` stata modificata
+        context.Entry(country).State = EntityState.Modified;
+
         await context.SaveChangesAsync();
 
         return Result.Success();
