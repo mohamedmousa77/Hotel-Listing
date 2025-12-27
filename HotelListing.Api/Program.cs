@@ -1,5 +1,6 @@
 using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.Services;
+using HotelListing.Api.CashePolicies;
 using HotelListing.Api.Common.Constants;
 using HotelListing.Api.Common.Models.Config;
 using HotelListing.Api.Domain;
@@ -92,7 +93,15 @@ builder.Services.AddControllers()
 
 builder.Services.AddOpenApi();
 
-builder.Services.AddMemoryCache();
+//builder.Services.AddMemoryCache();
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy(CasheConstants.AuthenticatedUserCashingPolicy, policy =>
+    {
+        policy.AddPolicy<CustomCashePolicy>()
+            .SetCacheKeyPrefix(CasheConstants.AuthenticatedUserCashingPolicyTag);
+    }, true);
+});
 
 var app = builder.Build();
 
@@ -124,6 +133,8 @@ else
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+app.UseOutputCache();
 
 app.MapControllers();
 

@@ -16,20 +16,10 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace HotelListing.Api.Application.Services;
 
-public class CountriesService(HotelListingDbContext context, IMapper mapper, IMemoryCache cashe) : ICountriesService
+public class CountriesService(HotelListingDbContext context, IMapper mapper) : ICountriesService
 {
-    private const string CountriesListName = "Countries_List_";
-    private const string SingleCountryCasheName = "country_";
-
     public async Task<Result<IEnumerable<GetCountriesDto>>> GetCountriesAsync(CountryFilterParameters? filters)
     {
-        var searchTerm = filters?.Search?.Trim().ToLowerInvariant() ?? string.Empty;
-        var casheKey = $"{CountriesListName}{searchTerm}";
-
-        // Check first if the data in the cashe
-        if (!cashe.TryGetValue(casheKey, out IEnumerable<GetCountriesDto>? countries))
-        {
-            // If the data is not in the cashe, then we need to hit the DB
             var query = context.Countries.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filters?.Search))
@@ -39,22 +29,14 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper, IMe
                 || EF.Functions.Like(c.ShortName, $"%{term}%"));
             }
 
-            countries = await query
+            var countries = await query
                .AsNoTracking()
                .ProjectTo<GetCountriesDto>(mapper.ConfigurationProvider)
-               .ToListAsync();
-
-            // Then we need to update the cashe with the data
-            var casheOptions = new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(TimeSpan.FromHours(1))
-                .SetSlidingExpiration(TimeSpan.FromMinutes(15));
-
-            cashe.Set(casheKey, countries, casheOptions);
-        }
-        countries ??= []; 
+               .ToListAsync();        
 
         return Result<IEnumerable<GetCountriesDto>>.Success(countries);
     }
+   
     public async Task<Result<GetCountryHotelsDto>> GetCountryHotelsAsync(
         int countryId, PaginationParameters paginationParameters, CountryFilterParameters? filters)
     {
@@ -106,29 +88,14 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper, IMe
 
         return Result<GetCountryHotelsDto>.Success(result);
     }
+    
     public async Task<Result<GetCountryDto>> GetCountryAsync(int id)
     {
-        // Check the cashe
-        var cacheKey = $"{SingleCountryCasheName}{id}";
-        if(!cashe.TryGetValue(cacheKey, out GetCountryDto? country))
-        {
-            // If not found in cashe, then hit the database
-            country = await context.Countries
+            var country = await context.Countries
                 .AsNoTracking()
                 .Where(c => c.CountryId == id)
                 .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
                 .FirstOrDefaultAsync();
-
-            // Store in cashe
-            if (country is not null)
-            {
-                var cacheOptions = new MemoryCacheEntryOptions()
-                    .SetSlidingExpiration(TimeSpan.FromMinutes(5)) // This to store the item in cashe if it is accessed within 5 minutes
-                    .SetAbsoluteExpiration(TimeSpan.FromHours(1));
-
-                cashe.Set(cacheKey, country, cacheOptions);
-            }
-        }
 
         return country is null
             ? Result<GetCountryDto>.Failure(new Error(ErrorCodes.NotFound, $"Country {id} was not found. "))
@@ -161,8 +128,6 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper, IMe
             context.Entry(country).State = EntityState.Modified;
             await context.SaveChangesAsync();
 
-            InvalidateCountryCashe(id);
-
             return Result.Success();
         }
         catch (Exception)
@@ -187,8 +152,6 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper, IMe
 
             var resultDto = mapper.Map<GetCountryDto>(country);
 
-            cashe.Remove($"{CountriesListName}");
-
             return Result<GetCountryDto>.Success(resultDto);
         }
         catch (Exception)
@@ -210,8 +173,6 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper, IMe
             context.Countries.Remove(country);
             context.Entry(country).State = EntityState.Modified;
             await context.SaveChangesAsync();
-
-            InvalidateCountryCashe(id);
 
             return Result.Success();
         }
@@ -254,6 +215,5 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper, IMe
         return Result.Success();
 
     }
-    private void InvalidateCountryCashe(int id) => cashe.Remove($"{SingleCountryCasheName}{id}");
     
 }
