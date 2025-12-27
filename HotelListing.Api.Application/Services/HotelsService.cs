@@ -154,8 +154,6 @@ public class HotelsService(
 
         return Result.Success();
     }
-
-
     public async Task<bool> HotelExistsAsync(int id) => await context.Hotels.AnyAsync(e => e.Id == id);
     public async Task<bool> HotelExistsAsync(string name, int countryId)
     {

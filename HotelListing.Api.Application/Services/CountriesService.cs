@@ -12,30 +12,51 @@ using HotelListing.Api.Domain;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace HotelListing.Api.Application.Services;
 
-public class CountriesService(HotelListingDbContext context, IMapper mapper) : ICountriesService
+public class CountriesService(HotelListingDbContext context, IMapper mapper, IMemoryCache cashe) : ICountriesService
 {
-    public async Task<Result<IEnumerable<GetCountriesDto>>> GetCountriesAsync(CountryFilterParameters filters)
-    {
-        var query = context.Countries.AsQueryable();
+    private const string CountriesListName = "Countries_List_";
+    private const string SingleCountryCasheName = "country_";
 
-        if (!string.IsNullOrWhiteSpace(filters.Search))
+    public async Task<Result<IEnumerable<GetCountriesDto>>> GetCountriesAsync(CountryFilterParameters? filters)
+    {
+        var searchTerm = filters?.Search?.Trim().ToLowerInvariant() ?? string.Empty;
+        var casheKey = $"{CountriesListName}{searchTerm}";
+
+        // Check first if the data in the cashe
+        if (!cashe.TryGetValue(casheKey, out IEnumerable<GetCountriesDto>? countries))
         {
-           var term = filters.Search.Trim();
-            query = query.Where(c => EF.Functions.Like(c.Name, $"%{term}%")
-            || EF.Functions.Like(c.ShortName, $"%{term}%"));
+            // If the data is not in the cashe, then we need to hit the DB
+            var query = context.Countries.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(filters?.Search))
+            {
+                var term = filters.Search.Trim();
+                query = query.Where(c => EF.Functions.Like(c.Name, $"%{term}%")
+                || EF.Functions.Like(c.ShortName, $"%{term}%"));
+            }
+
+            countries = await query
+               .AsNoTracking()
+               .ProjectTo<GetCountriesDto>(mapper.ConfigurationProvider)
+               .ToListAsync();
+
+            // Then we need to update the cashe with the data
+            var casheOptions = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(TimeSpan.FromHours(1))
+                .SetSlidingExpiration(TimeSpan.FromMinutes(15));
+
+            cashe.Set(casheKey, countries, casheOptions);
         }
-        var countries = await query
-            .AsNoTracking()
-            .ProjectTo<GetCountriesDto>(mapper.ConfigurationProvider)
-            .ToListAsync();
+        countries ??= []; 
 
         return Result<IEnumerable<GetCountriesDto>>.Success(countries);
     }
     public async Task<Result<GetCountryHotelsDto>> GetCountryHotelsAsync(
-        int countryId, PaginationParameters paginationParameters, CountryFilterParameters filters)
+        int countryId, PaginationParameters paginationParameters, CountryFilterParameters? filters)
     {
         var exists = await CountryExistsAsync(countryId);
         if (!exists)
@@ -53,13 +74,13 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
             .Where(h => h.CountryId == countryId)
             .AsQueryable();
 
-        if(!string.IsNullOrWhiteSpace(filters.Search))
+        if(!string.IsNullOrWhiteSpace(filters?.Search))
         {
             var term = filters.Search.Trim();
             hotelQuery = hotelQuery.Where(h => EF.Functions.Like(h.Name, $"%{term}%"));
         }
 
-        hotelQuery = (filters.SortBy?.Trim().ToLowerInvariant()) switch
+        hotelQuery = (filters?.SortBy?.Trim().ToLowerInvariant()) switch
         {
             "name" => filters.IsSortDescending
                 ? hotelQuery.OrderByDescending(h => h.Name)
@@ -87,19 +108,33 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
     }
     public async Task<Result<GetCountryDto>> GetCountryAsync(int id)
     {
+        // Check the cashe
+        var cacheKey = $"{SingleCountryCasheName}{id}";
+        if(!cashe.TryGetValue(cacheKey, out GetCountryDto? country))
+        {
+            // If not found in cashe, then hit the database
+            country = await context.Countries
+                .AsNoTracking()
+                .Where(c => c.CountryId == id)
+                .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync();
 
-        var country = await context.Countries
-            .AsNoTracking()
-            .Where(c => c.CountryId == id)
-            .ProjectTo<GetCountryDto>(mapper.ConfigurationProvider)
-            .FirstOrDefaultAsync();
+            // Store in cashe
+            if (country is not null)
+            {
+                var cacheOptions = new MemoryCacheEntryOptions()
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(5)) // This to store the item in cashe if it is accessed within 5 minutes
+                    .SetAbsoluteExpiration(TimeSpan.FromHours(1));
+
+                cashe.Set(cacheKey, country, cacheOptions);
+            }
+        }
 
         return country is null
             ? Result<GetCountryDto>.Failure(new Error(ErrorCodes.NotFound, $"Country {id} was not found. "))
             : Result<GetCountryDto>.Success(country);
     }
-
-    public async Task<Result> UpdateCountryAsync(int id, [FromBody] UpdateCountryDto countryDto)
+    public async Task<Result> UpdateCountryAsync(int id, UpdateCountryDto countryDto)
     {
         try
         {
@@ -123,7 +158,10 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
             }
 
             mapper.Map(countryDto, country);
+            context.Entry(country).State = EntityState.Modified;
             await context.SaveChangesAsync();
+
+            InvalidateCountryCashe(id);
 
             return Result.Success();
         }
@@ -149,6 +187,8 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
 
             var resultDto = mapper.Map<GetCountryDto>(country);
 
+            cashe.Remove($"{CountriesListName}");
+
             return Result<GetCountryDto>.Success(resultDto);
         }
         catch (Exception)
@@ -168,22 +208,23 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
             }
 
             context.Countries.Remove(country);
+            context.Entry(country).State = EntityState.Modified;
             await context.SaveChangesAsync();
 
-            return Result.Success();
+            InvalidateCountryCashe(id);
 
+            return Result.Success();
         }
         catch (Exception)
         {
-            return Result.Failure(new Error(ErrorCodes.Failure, "An unexpected errror occurred while deleting the country."));
+            return Result.Failure(new Error(ErrorCodes.Failure, 
+                "An unexpected errror occurred while deleting the country."));
         }
-
     }
     public async Task<bool> CountryExistsAsync(int id) => context.Countries.Any(e => e.CountryId == id);
     public async Task<bool> CountryExistsAsync(string name)
         => await context.Countries.
         AnyAsync(e => e.Name.ToLower().Trim() == name.ToLower().Trim());
-
     public async Task<Result> PatchCountryAsync(int id, JsonPatchDocument<UpdateCountryDto> patchDto)
     {
         var country = await context.Countries.FindAsync(id);
@@ -213,4 +254,6 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
         return Result.Success();
 
     }
+    private void InvalidateCountryCashe(int id) => cashe.Remove($"{SingleCountryCasheName}{id}");
+    
 }
