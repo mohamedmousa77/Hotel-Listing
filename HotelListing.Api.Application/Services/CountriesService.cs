@@ -20,6 +20,9 @@ public class CountriesService(HotelListingDbContext context, IMapper mapper) : I
 {
     public async Task<Result<IEnumerable<GetCountriesDto>>> GetCountriesAsync(CountryFilterParameters? filters)
     {
+        // For Testing 
+        //throw new System.Exception("Testing exception handling");
+
             var query = context.Countries.AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(filters?.Search))

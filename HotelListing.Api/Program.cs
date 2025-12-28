@@ -5,6 +5,7 @@ using HotelListing.Api.Common.Constants;
 using HotelListing.Api.Common.Models.Config;
 using HotelListing.Api.Domain;
 using HotelListing.Api.Handlers;
+using HotelListing.Api.Middleware;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
@@ -108,6 +109,9 @@ try
     builder.Services.AddScoped<IBookingServices, BookingServices>();
     builder.Services.AddScoped<IApiKeyValidatorService, ApiKeyValidatorService>();
 
+    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+    builder.Services.AddProblemDetails();
+
     builder.Services.AddAutoMapper(cfg => { }, Assembly.GetExecutingAssembly());
 
     builder.Services.AddControllers()
@@ -188,6 +192,8 @@ try
     });
 
     var app = builder.Build();
+
+    app.UseExceptionHandler();
 
     app.UseSerilogRequestLogging(options =>
     {
