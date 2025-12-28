@@ -7,6 +7,7 @@ using HotelListing.Api.Domain;
 using HotelListing.Api.Handlers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,13 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     Log.Information("Hotel Listing API Starting.");
+
     var builder = WebApplication.CreateBuilder(args);
+
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+    );
 
     // Add services to the container.
     var connectionString = builder.Configuration.GetConnectionString("HotelListingDbConnectionString");
@@ -181,6 +188,30 @@ try
     });
 
     var app = builder.Build();
+
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} " +
+        "responded {StatusCode} in {Elapsed:0.0000}ms";
+
+        options.GetLevel = (httpContext, elapsed, ex) => ex != null
+            ? LogEventLevel.Error
+            : httpContext.Response.StatusCode >= 500
+                ? LogEventLevel.Error
+                : httpContext.Response.StatusCode >= 400
+                    ? LogEventLevel.Warning
+                    : LogEventLevel.Information;
+
+        options.EnrichDiagnosticContext = (diagnosticContaxt, httpContext) =>
+        {
+            diagnosticContaxt.Set("UserName", httpContext.User?.Identity?.Name ?? "anonymous");
+            diagnosticContaxt.Set("RemoteIP", httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+            if(httpContext.User?.Identity?.IsAuthenticated == true)
+            {
+                diagnosticContaxt.Set("UserId", httpContext.User.FindFirst("sub")?.Value ?? "unknown");
+            }
+        };
+    });
 
     app.MapGroup("api/defaultauth").MapIdentityApi<ApplicationUser>();
 

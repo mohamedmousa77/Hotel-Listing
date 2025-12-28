@@ -6,6 +6,7 @@ using HotelListing.Api.Common.Results;
 using HotelListing.Api.Domain;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -14,8 +15,11 @@ using System.Text;
 
 namespace HotelListing.Api.Application.Services;
 
-public class UserServices(UserManager<ApplicationUser> userManager, IOptions<JwtSettings> jwtOptions,
-    IHttpContextAccessor httpContextAccessor, HotelListingDbContext context
+public class UserServices(UserManager<ApplicationUser> userManager,
+    IOptions<JwtSettings> jwtOptions,
+    IHttpContextAccessor httpContextAccessor,
+    HotelListingDbContext context,
+    ILogger<UserServices> logger
     ) : IUserServices
 {
 
@@ -34,6 +38,8 @@ public class UserServices(UserManager<ApplicationUser> userManager, IOptions<Jwt
         if (!result.Succeeded)
         {
             var errors = result.Errors.Select(e => new Error(e.Code, e.Description)).ToArray();
+            logger.LogError("User registration failed for {Email}: {Errors}",
+                registerUserDto.Email, string.Join(", ", errors));
             return Result<RegisteredUserDto>.BadRequest(errors);
 
         }
@@ -73,6 +79,7 @@ public class UserServices(UserManager<ApplicationUser> userManager, IOptions<Jwt
         var user = await userManager.FindByEmailAsync(loginUserDto.Email);
         if (user == null)
         {
+            logger.LogWarning("Failed login attempt for email: {Email}", loginUserDto.Email);
             return Result<string>.Failure(new Error(ErrorCodes.BadRequest, "Invalid credentials!"));
         }
 
