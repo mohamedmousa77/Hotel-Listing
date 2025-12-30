@@ -9,14 +9,17 @@ using HotelListing.Api.Middleware;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Events;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 
 
@@ -191,6 +194,13 @@ try
         };
     });
 
+    builder.Services.AddHealthChecks()
+        .AddCheck("self", () => HealthCheckResult.Healthy("Application is running"), tags: ["api"])
+        .AddDbContextCheck<HotelListingDbContext>(
+        name:"database", 
+        failureStatus: HealthStatus.Unhealthy, 
+        tags: ["db", "sql"]);        
+
     var app = builder.Build();
 
     app.UseExceptionHandler();
@@ -212,7 +222,7 @@ try
         {
             diagnosticContaxt.Set("UserName", httpContext.User?.Identity?.Name ?? "anonymous");
             diagnosticContaxt.Set("RemoteIP", httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown");
-            if(httpContext.User?.Identity?.IsAuthenticated == true)
+            if (httpContext.User?.Identity?.IsAuthenticated == true)
             {
                 diagnosticContaxt.Set("UserId", httpContext.User.FindFirst("sub")?.Value ?? "unknown");
             }
@@ -221,7 +231,7 @@ try
 
     app.MapGroup("api/defaultauth").MapIdentityApi<ApplicationUser>();
 
-    // Configure the HTTP request pipeline.
+
     if (app.Environment.IsDevelopment())
     {
         app.MapOpenApi();
@@ -245,6 +255,43 @@ try
     }
 
     app.UseHttpsRedirection();
+
+    app.MapHealthChecks("/healthz", new HealthCheckOptions
+    {
+        ResponseWriter = async (context, report) =>
+        {
+            context.Response.ContentType = "application/json";
+
+            var response = new
+            {
+                status = report.Status.ToString(),
+                checks = report.Entries.Select(entry => new
+                {
+                    name = entry.Key,
+                    status = entry.Value.Status.ToString(),
+                    description = entry.Value.Description,
+                    duration = entry.Value.Duration.TotalMicroseconds,
+                    exception = entry.Value.Exception?.Message,
+                    data = entry.Value.Data
+                }),
+                totalDuration = report.TotalDuration.TotalMilliseconds,
+            };
+            await context.Response.WriteAsync(JsonSerializer.Serialize(response, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }));
+        }
+    });
+
+    app.MapHealthChecks("/healthz/live", new HealthCheckOptions
+    {
+        Predicate = _ => false
+    });
+
+    app.MapHealthChecks("/healthz/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("db")
+    });
 
     app.UseRateLimiter();
 
