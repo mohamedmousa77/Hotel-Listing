@@ -10,18 +10,17 @@ using HotelListing.Api.Handlers;
 using HotelListing.Api.Middleware;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using Serilog;
 using Serilog.Events;
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
 using System.Threading.RateLimiting;
 
 
@@ -128,6 +127,7 @@ try
 
     builder.Services.AddOpenApi();
 
+    //Adding Caching.
     //builder.Services.AddMemoryCache();
     builder.Services.AddOutputCache(options =>
     {
@@ -138,6 +138,7 @@ try
         }, true);
     });
 
+    // Adding Rate Limiting
     builder.Services.AddRateLimiter(options =>
     {
         options.AddFixedWindowLimiter("fixed", opt =>
@@ -196,11 +197,12 @@ try
         };
     });
 
+    // Adding Health Checks
     builder.Services.AddHealthChecks()
         .AddCheck("self", () => HealthCheckResult.Healthy("Application is running"), tags: ["api"])
         .AddDbContextCheck<HotelListingDbContext>(
-        name:"database", 
-        failureStatus: HealthStatus.Unhealthy, 
+        name: "database",
+        failureStatus: HealthStatus.Unhealthy,
         tags: ["db", "sql"]);
 
     builder.Services.AddHealthChecksUI(setup =>
@@ -210,20 +212,98 @@ try
         setup.AddHealthCheckEndpoint("HotelListing API", "healthz");
     }).AddInMemoryStorage();
 
+    // Adding API Versioning
     builder.Services.AddApiVersioning(options =>
     {
         options.AssumeDefaultVersionWhenUnspecified = true;
         options.DefaultApiVersion = new ApiVersion(1, 0);
         options.ReportApiVersions = true;
         options.ApiVersionReader = new UrlSegmentApiVersionReader();
-    }).AddApiExplorer(options =>
+    }).AddApiExplorer(
+        options =>
+        {
+            options.GroupNameFormat = "'v'VVV";
+            options.SubstituteApiVersionInUrl = true;
+        });
+
+    // --- 1. CONFIGURING V1 DOCUMENT ---
+    builder.Services.AddOpenApi("v1", options =>
     {
-        options.GroupNameFormat = "'v'VVV";
-        options.SubstituteApiVersionInUrl = true;
+        options.AddDocumentTransformer((document, context, cancellationToken) =>
+        {
+            // Metadata Specification
+            document.Info.Title = "Hotel Listing API";
+            document.Info.Version = "v1";
+            document.Info.Description = "API for managing hotels, countries, and bookings";
+            document.Info.Contact = new OpenApiContact { Name = "Support Team", Email = "support@hotellisting.com" };
+            document.Info.License = new OpenApiLicense { Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT") };
+
+            // Define Security Schemes (Bearer, API Key, Basic)
+            var schemes = document?.Components?.SecuritySchemes;
+
+            schemes?["Bearer"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                Description = "JWT Authorization header using Bearer scheme."
+            };
+
+            schemes?["ApiKey"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.ApiKey,
+                Name = "X-Api-Key",
+                In = ParameterLocation.Header,
+                Description = "API Key needed to access the endpoints."
+            };
+
+            schemes?["Basic"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = "basic",
+                Description = "Basic Authentication header"
+            };
+            
+            var requirement = new OpenApiSecurityRequirement
+            {
+                [new OpenApiSecuritySchemeReference("Bearer", document)] = new List<string>()
+            };
+
+            document?.Security?.Add(requirement);
+            return Task.CompletedTask;
+        });
+    });
+
+    // --- 2. CONFIGURING V2 DOCUMENT ---
+    builder.Services.AddOpenApi("v2", options =>
+    {
+        options.AddDocumentTransformer((document, context, cancellationToken) =>
+        {
+            document.Info.Title = "Hotel Listing API V2";
+            document.Info.Version = "v2";
+            document.Info.Description = "Version 2 with enhanced features";
+            return Task.CompletedTask;
+        });
     });
 
     var app = builder.Build();
 
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+        app.UseSwaggerUI(options =>
+        {
+            options.SwaggerEndpoint("/openapi/v1.json", "Hotel Listing API V1");
+            options.SwaggerEndpoint("/openapi/v2.json", "Hotel Listing API V2");
+            options.RoutePrefix = "swagger";
+            options.DocumentTitle = "Hotel Listing API Documentation";
+            options.EnableDeepLinking();
+            options.DisplayRequestDuration();
+            options.EnableFilter();
+            options.ShowExtensions();
+            options.EnableValidator();
+        });
+    }
     app.UseExceptionHandler();
 
     app.UseSerilogRequestLogging(options =>

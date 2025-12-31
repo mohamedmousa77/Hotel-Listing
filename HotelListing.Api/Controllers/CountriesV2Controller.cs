@@ -2,14 +2,13 @@
 
 using Asp.Versioning;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Build.Tasks;
 
 namespace HotelListing.Api.Controllers;
 
 [Route("api/v{version:apiVersion}/countries")]
 [ApiController]
 [ApiVersion("2.0", Deprecated = true)]
-public class CountriesV2Controller : Controller
+public class CountriesV2Controller : ControllerBase
 {
     [HttpGet]
     public IActionResult GetCounties(
@@ -19,7 +18,7 @@ public class CountriesV2Controller : Controller
         return Ok(new
         {
             Version = "v2.0",
-            Message = "Enhanced countries endpoint with pagination... This is the deprecated version of the Countries API."
+            Message = "Enhanced countries endpoint with pagination... This is the deprecated version of the Countries API.",
             PageNumber = pageNumber,
             PageSize = pageSize
         });

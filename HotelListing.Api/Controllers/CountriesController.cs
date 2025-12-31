@@ -1,8 +1,6 @@
 ﻿using Asp.Versioning;
-using Azure;
 using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.DTOs.Country;
-using HotelListing.Api.Application.DTOs.Hotel;
 using HotelListing.Api.Common.Constants;
 using HotelListing.Api.Common.Models.Filtering;
 using HotelListing.Api.Common.Models.Paging;
@@ -14,13 +12,24 @@ using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace HotelListing.Api.Controllers;
-
+/// <summary>
+/// Controller for managing countries
+/// </summary>
+/// <param name="countriesService"></param>
 [Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
 [ApiVersion("1.0")]
 [EnableRateLimiting("fixed")]
 public class CountriesController(ICountriesService countriesService) : BaseApiController
 {
+    /// <summary>
+    ///  Retrieves that list of countries that match the provided filter parameters.
+    /// </summary>
+    /// <param name="countryFilterParameters">An optional sef of parameters used to filter the list of countries</param>
+    /// <returns>An async operation that returns an <see cref="ActionResult{T}"/></returns>
+    /// cref="IEnumerable{GetCountriesDto}"/> containing the list of countries that match the provided filter parameters.
+    /// <response code="200">Returns the list of countries</response>
+    /// <response code="404">If the filter parameters are invalid</response>
     [HttpGet]
     [OutputCache(PolicyName = CasheConstants.AuthenticatedUserCashingPolicy)]
     public async Task<ActionResult<IEnumerable<GetCountriesDto>>> GetCountries(
@@ -32,7 +41,7 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
 
     [HttpGet("{countryId:int}/hotels")]
     public async Task<ActionResult<GetCountryHotelsDto>> GetCountryHotels(
-        [FromRoute] int countryId, 
+        [FromRoute] int countryId,
         [FromQuery] PaginationParameters paginationParameters,
         [FromQuery] CountryFilterParameters countryFilterParameters
         )
@@ -50,6 +59,12 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
 
     [HttpPut("{id}")]
     [Authorize(Roles = RoleNames.Administrator)]
+    // Another way to update the documentation with the actual response types
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status408RequestTimeout)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> PutCountry([FromQuery] int id, [FromBody] UpdateCountryDto countryDto)
     {
 
@@ -70,7 +85,7 @@ public class CountriesController(ICountriesService countriesService) : BaseApiCo
 
     [HttpPost]
     [Authorize(Roles = RoleNames.Administrator)]
-    public async Task<ActionResult<Country>> PostCountry([FromBody]CreateCountryDto countryDto)
+    public async Task<ActionResult<Country>> PostCountry([FromBody] CreateCountryDto countryDto)
     {
         var result = await countriesService.CreateCountryAsync(countryDto);
         if (!result.IsSuccess) return MapErrorsToResponse(result.Errors);
