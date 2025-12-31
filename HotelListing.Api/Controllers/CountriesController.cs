@@ -1,4 +1,5 @@
-﻿using Azure;
+﻿using Asp.Versioning;
+using Azure;
 using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.DTOs.Country;
 using HotelListing.Api.Application.DTOs.Hotel;
@@ -14,8 +15,9 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace HotelListing.Api.Controllers;
 
-[Route("api/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
 [EnableRateLimiting("fixed")]
 public class CountriesController(ICountriesService countriesService) : BaseApiController
 {

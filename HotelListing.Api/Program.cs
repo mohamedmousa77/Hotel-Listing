@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using HealthChecks.UI.Client;
 using HotelListing.Api.Application.Contracts;
 using HotelListing.Api.Application.Services;
@@ -206,9 +207,20 @@ try
     {
         setup.SetEvaluationTimeInSeconds(10);
         setup.MaximumHistoryEntriesPerEndpoint(50);
-        setup.AddHealthCheckEndpoint("HotelListing API", "healthzUI");
-    })
-        .AddInMemoryStorage();
+        setup.AddHealthCheckEndpoint("HotelListing API", "healthz");
+    }).AddInMemoryStorage();
+
+    builder.Services.AddApiVersioning(options =>
+    {
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.ReportApiVersions = true;
+        options.ApiVersionReader = new UrlSegmentApiVersionReader();
+    }).AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV";
+        options.SubstituteApiVersionInUrl = true;
+    });
 
     var app = builder.Build();
 
