@@ -45,8 +45,6 @@ The project follows a **Layered Architecture** (Separation of Concerns) to decou
 
 ## 📂 Project Structure
 
-Based on the repository's organization:
-
 * `HotelListing.Api`: The entry point and UI/API layer.
 * `HotelListing.Api.Application`: Business logic, DTOs, and Service interfaces.
 * `HotelListing.Api.Domain`: Core entities and database models.
